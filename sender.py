@@ -45,13 +45,13 @@ def main():
     print "<filename>%s <remote_IP>%s <remote_port>%d <ack_port_num>%d <log_filename>%s <window_size>%s " % (filename, remote_ip, remote_port, ack_port_num, log_filename, window_size)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
-    tcp_header = make_tcp_header(ack_port_num, remote_port, 0, 0, 0, 0, 99, 5)
-    sock.sendto(tcp_header + "hello udp", (remote_ip, remote_port))
+    
+    #sock.sendto(tcp_header + "hello udp", (remote_ip, remote_port))
     build_all_packets("test.txt")
     sorted_index = sorted(all_packets)
     for i in sorted_index:
-        print(all_packets[i])
-
+        tcp_header = make_tcp_header(ack_port_num, remote_port, i, 0, 0, 0, 99, 5)
+        sock.sendto(tcp_header + all_packets[i], (remote_ip, remote_port))
 
 if __name__ == '__main__': 
     try:
