@@ -1,0 +1,23 @@
+Big technology companies have usually played a defensive game with government prosecutors in their legal fight over customer information, fighting or bowing to requests for information one case at a time.
+
+But now Microsoft, in a move that could broaden the debate over the balance between customer privacy and law enforcement needs, is going on the offense.
+
+The software giant is suing the Justice Department, challenging its frequent use of secrecy orders that prevent Microsoft from telling people when the government obtains a warrant to read their emails.
+
+In its suit, filed Thursday morning in Federal District Court in Seattle, Microsoft’s home turf, the company asserts that the gag order statute in the Electronic Communications Privacy Act of 1986 — as employed today by federal prosecutors and the courts — is unconstitutional.
+
+The statute, according to Microsoft, violates the Fourth Amendment right of its customers to know if the government searches or seizes their property, and it breaches the company’s First Amendment right to speak to its customers.
+
+Microsoft’s suit, unlike Apple’s fight with the Federal Bureau of Investigation over access to a locked iPhone, is not attached to a single case. Instead, it is intended to challenge the legal process regarding secrecy orders.
+
+The company is also trying to fuel a public debate about the frequent use of secrecy orders in government investigations and, in the process, portray itself as an advocate of its customers’ privacy. The suit itself could plod through the courts, with appeals going on for months or even years.
+
+Emily Pierce, a spokeswoman for the Justice Department, said officials were “reviewing the filng.”
+
+Microsoft is drawing attention to legal issues that have become more acute as tech companies move their customers’ personal and business information into so-called cloud-computing systems. The largest such digital storehouses of personal email and documents are operated by big tech companies like Microsoft, Google and Apple.
+
+Seizing information from file drawers or personal computers used to require entering a building to examine paper or a hard drive. Typically, the target of an investigation knew about it.
+
+Not so in the cloud computing era, when investigators can bypass an individual and go straight to the company that hosts that information. And when courts issue secrecy orders, often with no time limit, a target may never know that information was taken.
+
+Microsoft, in its suit, contends that the government has “exploited the transition to cloud computing as a means of expanding its power to conduct secret investigations.”
