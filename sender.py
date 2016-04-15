@@ -8,7 +8,7 @@ from datetime import datetime
 MSS = 128
 buffer_size = 1024
 ERTT = 0
-timeout = 5 # 5 secs
+timeout = 2 # 2 secs
 last_packet_size = 0
 final_seq = 0
 current_sending = 0 # maintain # sending packets not to exceed window size

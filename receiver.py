@@ -4,7 +4,6 @@ from struct import unpack, pack
 from datetime import datetime
 
 buffer_size = 1024
-next_expect_seq = 0
 recv_packets = dict() # dictionary: key = seq, value = data_buffer
 
 def build_file(filename):
@@ -36,7 +35,7 @@ def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
             f.close()
         except:
             print "file %s not found" % log_filename 
-            
+
 def handle_packet(header, log_filename):
     (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , header)
     write_log(log_filename, source_port, dst_port, seq, ack_seq, tcp_flags)           
@@ -52,7 +51,6 @@ def main():
     sender_IP = sys.argv[3]
     sender_port = int(sys.argv[4])
     log_filename = sys.argv[5]
-    global next_expect_seq
 
     print "<filename>%s <listening_port>%d <sender_IP>%s <sender_port>%d <log_filename>%s " % (filename, listening_port, sender_IP, sender_port, log_filename)
 
@@ -64,22 +62,21 @@ def main():
         data, addr = sock.recvfrom(buffer_size) 
         seq = handle_packet(data[:20], log_filename) # header = data[:20], payload = data[20:]
 
-        if seq == next_expect_seq and 1: # FIXME: add checksum
+        if seq not in recv_packets: # FIXME: add checksum
             recv_packets[seq] = data[20:]
             ack_seq = seq + len(data[20:]) 
-            next_expect_seq = ack_seq
-            tcp_header = make_tcp_header(listening_port, sender_port, 0, ack_seq, 1, 0, 99, 5)
+            tcp_header = make_tcp_header(listening_port, sender_port, 0, ack_seq, 1, 0, 99, 0)
             ack_sock.sendto(tcp_header, (sender_IP, sender_port)) # send ACK packet
             write_log(log_filename, listening_port, sender_port, 0, ack_seq, 1<<4)
-        elif seq in recv_packets and 1: # duplicate packets # FIXME: add checksum
+        else: # duplicate packets # FIXME: add checksum
             pass
-
+'''
         else:  # packet lost or corrupt 
             ack_seq = next_expect_seq
             tcp_header = make_tcp_header(listening_port, sender_port, 0, ack_seq, 1, 0, 99, 5)
             ack_sock.sendto(tcp_header, (sender_IP, sender_port)) # send ACK packet
             write_log(log_filename, listening_port, sender_port, 0, ack_seq, 1<<4)
-
+'''
         
 
 if __name__ == '__main__': 
