@@ -2,9 +2,11 @@ import sys
 import socket
 import select 
 from struct import pack, unpack
+from datetime import datetime
 
 MSS = 128
 buffer_size = 1024
+ERTT = 0
 current_sending = 0 # maintain # sending packets not to exceed window size
 all_packets = dict() # dictionary: key = seq, value = data_buffer
 sent_packets = dict() # dictionary: key = seq, value = time
@@ -33,12 +35,28 @@ def make_tcp_header(source_port, dst_port, seq, ack_seq, ack_flag, fin_flag, che
     tcp_flags = fin_flag + (syn << 1) + (rst << 2) + (psh <<3) + (ack_flag << 4) + (urg << 5)
     return pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)
 
-def handle_ack(header):
+def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
+    if log_filename == "stdout":
+            print "%s, %s, %s, %d, %d, %s, %d" % (datetime.now(), src_port, dest_port, seq, ack_seq , tcp_flags, ERTT)
+    else:    
+        try:
+            f = open(log_filename,'a')
+            f.write("%s, %s, %s, %d, %d, %s, %d\n" % (datetime.now(), src_port, dest_port, ack_seq, ack_seq , tcp_flags, ERTT)) 
+            f.close()
+        except:
+            print "file %s not found" % log_filename 
+
+def handle_ack(header, log_filename):
     global current_sending
-    current_sending -= 1
-    (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , header)
-    print "ACK: source_port %d, dst_port %d, seq %d, ack_seq %d, header_length %d, tcp_flags %s,  window_size %d, checksum %d, tcp_urg_ptr %d" % (source_port, dst_port, seq, ack_seq, header_length >> 4, tcp_flags,  window_size, checksum, urg_ptr)
- 
+    (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , header)  
+    write_log(log_filename, source_port, dst_port, seq, ack_seq, tcp_flags)      
+    if ack_seq not in acked_packets:
+        acked_packets[ack_seq] = datetime.now()
+        current_sending -= 1
+    else: # duplicate ack
+        print "duplicate ack: %d" % ack_seq  
+
+    return ack_seq
 
 ''' sender <filename> <remote_IP> <remote_port> <ack_port_num> <log_filename> <window_size> '''
 def main():    
@@ -67,7 +85,7 @@ def main():
         packet_seq = sorted_index[index_packets]
         tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, 99, 5)
         sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port))
-        print "SEND: seg = %d"%packet_seq
+        write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0) 
         index_packets += 1
         current_sending += 1
 
@@ -78,15 +96,15 @@ def main():
         for current in inputready:
             if current == ack_sock: # receive ACK packet
                 data = current.recv(buffer_size) 
-                handle_ack(data[:20])
+                handle_ack(data[:20], log_filename)
 
-        while current_sending < int(window_size):
+        while current_sending < int(window_size): # check window size and send new packets
             if index_packets == len(sorted_index):
                 break
             packet_seq = sorted_index[index_packets]
             tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, 99, 5)
-            sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port))
-            print "SEND: seg = %d"%packet_seq
+            sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port)) 
+            write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0) 
             index_packets += 1
             current_sending += 1
 
@@ -94,6 +112,8 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
+        for i in sorted(acked_packets):
+            print i
         print '\nserver receive ctrl+C\n'
 
 
