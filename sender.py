@@ -28,18 +28,32 @@ def build_all_packets(file):
         last_packet_size = len(chunk)
         seq += MSS
 
-def make_tcp_header(source_port, dst_port, seq, ack_seq, ack_flag, fin_flag, checksum, window_size):
+def carry(a, b):
+    c = a + b
+    return (c & 0xffff) + (c >> 16)
+ 
+def get_checksum(data):
+    s = 0
+    for i in range(0, len(data), 2):
+        w = ord(data[i]) + (ord(data[i+1]) << 8)
+        s = carry(s, w)
+    return ~s & 0xffff
+ 
+
+def make_tcp_header(source_port, dst_port, seq, ack_seq, ack_flag, fin_flag, window_size, payload):
     size_of_header = 5 # 5 fields  
     syn = 0
     rst = 0
     psh = 0
     urg = 0
-    check = 0
     urg_ptr = 0
  
     header_length = (size_of_header << 4) + 0
     tcp_flags = fin_flag + (syn << 1) + (rst << 2) + (psh <<3) + (ack_flag << 4) + (urg << 5)
+    data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr) + payload
+    checksum = get_checksum(data)
     return pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)
+
 
 def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
     if log_filename == "stdout":
@@ -52,7 +66,20 @@ def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
         except:
             print "file %s not found" % log_filename 
 
+def checksum_verify(header):
+    (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , header)
+    data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr)
+    if checksum == get_checksum(data): # valid packet
+        return 0
+    else:
+        return -1    
+
 def handle_ack(header, log_filename):
+    # FIXME: add checksum
+    if checksum_verify(header) != 0:
+        print "packet corruption"
+        return
+
     global current_sending
     (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , header)  
     write_log(log_filename, source_port, dst_port, seq, ack_seq, tcp_flags)      
@@ -75,7 +102,7 @@ def timeout_checker(log_filename, sock, ack_port_num, remote_ip, remote_port, pa
     #print "timeout_checker check %d for seq %d " % (check_seq, packet_seq)
     
     if check_seq not in acked_packets: # packet lost timeout  
-        tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, 99, window_size)
+        tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, window_size, all_packets[packet_seq])
         sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port))
         checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size) # register a timeout checker
         print "timeout! check seq %d failed, resend seq: %d\n" % (check_seq, packet_seq)
@@ -114,7 +141,7 @@ def main():
         if index_packets == len(sorted_index):
                 break
         packet_seq = sorted_index[index_packets]
-        tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, 99, int(window_size))
+        tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, int(window_size), all_packets[packet_seq])
         sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port))
         checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, int(window_size)) # register a timeout checker
         write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0) 
@@ -134,7 +161,7 @@ def main():
             if index_packets == len(sorted_index):
                 break
             packet_seq = sorted_index[index_packets]
-            tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, 99, int(window_size))
+            tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, int(window_size), all_packets[packet_seq])
             sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port)) 
             checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, int(window_size)) # register a timeout checker
             write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0) 
