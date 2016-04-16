@@ -4,6 +4,7 @@ from struct import unpack, pack
 from datetime import datetime
 
 buffer_size = 1024
+transfer_finished = 0
 recv_packets = dict() # dictionary: key = seq, value = data_buffer
 
 def build_file(filename):
@@ -53,16 +54,19 @@ def get_checksum(data):
 
 def handle_packet(header, payload, log_filename):
     (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , header)
-    write_log(log_filename, source_port, dst_port, seq, ack_seq, tcp_flags)        
+    write_log(log_filename, source_port, dst_port, seq, ack_seq, tcp_flags)  
     return seq
 
 def checksum_verify(data):
     (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , data[:20])
     data_checksum_zero = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr) + data[20:]
-    if checksum == get_checksum(data_checksum_zero): # valid packet
+    global transfer_finished
+    if checksum == get_checksum(data_checksum_zero): # valid packet   
+        if tcp_flags & 0x1 == 1: # fin flag is 1
+            transfer_finished = 1
         return 0
     else:
-        print "packet corrupt"
+        print "packet corrupt %d != %d" %(get_checksum(data_checksum_zero), checksum)
         return -1  
 
 ''' receiver <filename> <listening_port> <sender_IP> <sender_port> <log_filename> '''
@@ -81,6 +85,12 @@ def main():
     ack_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
 
     while True:
+        if transfer_finished == 1:
+            build_file(filename)
+            tcp_header = make_tcp_header(listening_port, sender_port, 0, 0, 1, 0, 1)
+            ack_sock.sendto(tcp_header, (sender_IP, sender_port)) # send ACK for receiving fin
+            print "Delivery completed successfully"
+            break
         data, addr = sock.recvfrom(buffer_size) 
         seq = handle_packet(data[:20], data[20:], log_filename) # header = data[:20], payload = data[20:]
         if checksum_verify(data) != 0:
@@ -108,4 +118,4 @@ if __name__ == '__main__':
         main()
     except KeyboardInterrupt:
         print '\nserver receive ctrl+C\n'
-        build_file("output.txt")
+        #build_file("output.txt")

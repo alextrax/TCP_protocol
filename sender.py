@@ -10,7 +10,9 @@ buffer_size = 1024
 ERTT = 0
 timeout = 2 # 2 secs
 last_packet_size = 0
-final_seq = 0
+final_seq = -1
+fin_packet_seq = -1
+fin_received = 0
 current_sending = 0 # maintain # sending packets not to exceed window size
 all_packets = dict() # dictionary: key = seq, value = data_buffer
 sent_packets = dict() # dictionary: key = seq, value = time
@@ -27,6 +29,8 @@ def build_all_packets(file):
         all_packets[seq] = chunk
         last_packet_size = len(chunk)
         seq += MSS
+    
+
 
 def carry(a, b):
     c = a + b
@@ -50,7 +54,10 @@ def make_tcp_header(source_port, dst_port, seq, ack_seq, ack_flag, fin_flag, win
  
     header_length = (size_of_header << 4) + 0
     tcp_flags = fin_flag + (syn << 1) + (rst << 2) + (psh <<3) + (ack_flag << 4) + (urg << 5)
-    data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr) + payload
+    if fin_flag == 0:
+        data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr) + payload
+    else: 
+        data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr)
     checksum = get_checksum(data)
     return pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)
 
@@ -89,13 +96,19 @@ def handle_ack(header, log_filename):
     else: # duplicate ack
         print "duplicate ack: %d\n" % ack_seq  
 
-    if len(acked_packets) == len(all_packets):
-        print "File transfer finish!"
     return ack_seq
 
 def timeout_checker(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size):
     if packet_seq == final_seq:
         check_seq = packet_seq + last_packet_size
+    elif packet_seq == fin_packet_seq : # check if fin receiver
+        if fin_received == 0:
+            fin_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 1, window_size, all_packets[packet_seq])
+            sock.sendto(fin_header, (remote_ip, remote_port))
+            checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size) # register a timeout checker
+            print "fin packet delever failed\n" 
+            write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0)
+            return
     else:
         check_seq = packet_seq + MSS    
 
@@ -112,7 +125,8 @@ def checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, p
     t = threading.Timer(timeout, timeout_checker, [log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size])
     t.daemon = True
     t.start()
-    
+   
+
 
 ''' sender <filename> <remote_IP> <remote_port> <ack_port_num> <log_filename> <window_size> '''
 def main():    
@@ -124,6 +138,8 @@ def main():
     log_filename = sys.argv[5]
     window_size = sys.argv[6]
     global final_seq
+    global fin_packet_seq
+    global fin_received
 
     print "<filename>%s <remote_IP>%s <remote_port>%d <ack_port_num>%d <log_filename>%s <window_size>%s " % (filename, remote_ip, remote_port, ack_port_num, log_filename, window_size)
 
@@ -143,6 +159,7 @@ def main():
         packet_seq = sorted_index[index_packets]
         tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, int(window_size), all_packets[packet_seq])
         sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port))
+        sent_packets[packet_seq] = datetime.now()
         checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, int(window_size)) # register a timeout checker
         write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0) 
         index_packets += 1
@@ -156,6 +173,15 @@ def main():
             if current == ack_sock: # receive ACK packet
                 data = current.recv(buffer_size) 
                 handle_ack(data[:20], log_filename)
+                if len(acked_packets) == len(all_packets):
+                    fin_packet_seq = sorted(acked_packets)[-1]
+                    fin_header = make_tcp_header(ack_port_num, remote_port, fin_packet_seq, 0, 0, 1, int(window_size), "")
+                    sock.sendto(fin_header, (remote_ip, remote_port))   
+                    checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, fin_packet_seq, int(window_size)) # register a timeout checker          
+                    current.recv(buffer_size)
+                    fin_received = 1
+                    print "Delivery completed successfully"
+                    sys.exit(0)
 
         while current_sending < int(window_size): # check window size and send new packets
             if index_packets == len(sorted_index):
@@ -163,6 +189,7 @@ def main():
             packet_seq = sorted_index[index_packets]
             tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, int(window_size), all_packets[packet_seq])
             sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port)) 
+            sent_packets[packet_seq] = datetime.now()
             checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, int(window_size)) # register a timeout checker
             write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0) 
             index_packets += 1
