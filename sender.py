@@ -103,7 +103,7 @@ def timeout_checker(log_filename, sock, ack_port_num, remote_ip, remote_port, pa
         check_seq = packet_seq + last_packet_size
     elif packet_seq == fin_packet_seq : # check if fin receiver
         if fin_received == 0:
-            fin_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 1, window_size, all_packets[packet_seq])
+            fin_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 1, window_size, "")
             sock.sendto(fin_header, (remote_ip, remote_port))
             checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size) # register a timeout checker
             print "fin packet delever failed\n" 
