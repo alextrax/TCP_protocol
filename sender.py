@@ -201,6 +201,26 @@ def print_statistic():
     retrans_rate = float(retransmit_count) / float(sent_count)
     print "Segments retransmitted = %.2f %%" % retrans_rate
 
+def check_IPv4(addr):
+    try:
+        socket.inet_pton(socket.AF_INET, addr)
+    except socket.error:
+        return False
+    return True    
+
+def check_IPv6(addr):
+    try:
+        socket.inet_pton(socket.AF_INET6, addr)
+    except socket.error:
+        return False
+    return True 
+
+def create_sock_on_addr(addr):
+    if check_IPv4(addr) == True:
+        return socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+    elif check_IPv6(addr) == True:
+        return socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)  
+
 
 ''' sender <filename> <remote_IP> <remote_port> <ack_port_num> <log_filename> <window_size> '''
 def main():    
@@ -220,8 +240,12 @@ def main():
 
     print "<filename>%s <remote_IP>%s <remote_port>%d <ack_port_num>%d <log_filename>%s <window_size>%s " % (filename, remote_ip, remote_port, ack_port_num, log_filename, window_size)
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
-    ack_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+    res = socket.getaddrinfo(remote_ip, remote_port, socket.AF_UNSPEC, socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)
+    af, socktype, proto, cn, sockaddr = res[0]
+    print sockaddr
+
+    sock = create_sock_on_addr(sockaddr[0])
+    ack_sock = create_sock_on_addr(sockaddr[0]) 
     ack_sock.bind((host, ack_port_num))
     build_all_packets("test.txt")
 
@@ -235,7 +259,7 @@ def main():
                 break
         packet_seq = sorted_index[index_packets]
         tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, int(window_size), all_packets[packet_seq])
-        sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port))
+        sock.sendto(tcp_header + all_packets[packet_seq], sockaddr)
         increase_sent_byte(len(tcp_header + all_packets[packet_seq]))
         sent_packets[packet_seq] = datetime.now()
         checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, int(window_size)) # register a timeout checker
@@ -254,7 +278,7 @@ def main():
                 if len(acked_packets) == len(all_packets):
                     fin_packet_seq = sorted(acked_packets)[-1]
                     fin_header = make_tcp_header(ack_port_num, remote_port, fin_packet_seq, 0, 0, 1, int(window_size), "")
-                    sock.sendto(fin_header, (remote_ip, remote_port))   
+                    sock.sendto(fin_header, sockaddr)   
                     increase_sent_byte(len(fin_header))
                     checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, fin_packet_seq, int(window_size)) # register a timeout checker          
                     current.recv(buffer_size)
@@ -267,7 +291,7 @@ def main():
                 break
             packet_seq = sorted_index[index_packets]
             tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, int(window_size), all_packets[packet_seq])
-            sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port)) 
+            sock.sendto(tcp_header + all_packets[packet_seq], sockaddr) 
             increase_sent_byte(len(tcp_header + all_packets[packet_seq]))
             sent_packets[packet_seq] = datetime.now()
             checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, int(window_size)) # register a timeout checker

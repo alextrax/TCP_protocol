@@ -62,6 +62,27 @@ def checksum_verify(data):
         print "packet corrupt %d != %d" %(get_checksum(data_checksum_zero), checksum)
         return -1  
 
+
+def check_IPv4(addr):
+    try:
+        socket.inet_pton(socket.AF_INET, addr)
+    except socket.error:
+        return False
+    return True    
+
+def check_IPv6(addr):
+    try:
+        socket.inet_pton(socket.AF_INET6, addr)
+    except socket.error:
+        return False
+    return True 
+
+def create_sock_on_addr(addr):
+    if check_IPv4(addr) == True:
+        return socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+    elif check_IPv6(addr) == True:
+        return socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)  
+
 ''' receiver <filename> <listening_port> <sender_IP> <sender_port> <log_filename> '''
 def main():    
     host = ''
@@ -72,16 +93,19 @@ def main():
     log_filename = sys.argv[5]
 
     print "<filename>%s <listening_port>%d <sender_IP>%s <sender_port>%d <log_filename>%s " % (filename, listening_port, sender_IP, sender_port, log_filename)
+    res = socket.getaddrinfo(sender_IP, sender_port, socket.AF_UNSPEC, socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)
+    af, socktype, proto, cn, sockaddr = res[0]
+    print sockaddr
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+    sock = create_sock_on_addr(sockaddr[0]) 
     sock.bind((host, listening_port))
-    ack_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+    ack_sock = create_sock_on_addr(sockaddr[0])
 
     while True:
         if transfer_finished == 1:
             build_file(filename)
             tcp_header = make_tcp_header(listening_port, sender_port, 0, 0, 1, 0, 1)
-            ack_sock.sendto(tcp_header, (sender_IP, sender_port)) # send ACK for receiving fin
+            ack_sock.sendto(tcp_header, sockaddr) # send ACK for receiving fin
             print "Delivery completed successfully"
             break
         data, addr = sock.recvfrom(buffer_size) 
@@ -93,7 +117,7 @@ def main():
             recv_packets[seq] = data[20:]
             ack_seq = seq + len(data[20:]) 
             tcp_header = make_tcp_header(listening_port, sender_port, 0, ack_seq, 1, 0, 1)
-            ack_sock.sendto(tcp_header, (sender_IP, sender_port)) # send ACK packet
+            ack_sock.sendto(tcp_header, sockaddr) # send ACK packet
             write_log(log_filename, listening_port, sender_port, 0, ack_seq, 1<<4)
         else: # duplicate packets # FIXME: add checksum
             pass
