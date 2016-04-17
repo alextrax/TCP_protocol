@@ -7,8 +7,9 @@ from datetime import datetime
 
 MSS = 128
 buffer_size = 1024
-ERTT = 0
-timeout = 2 # 2 secs
+ERTT = 0 
+devRTT = 0
+timeout = 3 # initial 3 secs ref: http://www.rfc-base.org/txt/rfc-6298.txt
 last_packet_size = 0
 final_seq = -1
 fin_packet_seq = -1
@@ -22,6 +23,7 @@ def build_all_packets(file):
     f = open(file)
     seq = 0
     global last_packet_size
+    global fin_packet_seq
     while True:
         chunk = f.read(MSS)
         if chunk == "":
@@ -29,7 +31,7 @@ def build_all_packets(file):
         all_packets[seq] = chunk
         last_packet_size = len(chunk)
         seq += MSS
-    
+    fin_packet_seq = seq - MSS + last_packet_size
 
 
 def carry(a, b):
@@ -45,30 +47,23 @@ def get_checksum(data):
  
 
 def make_tcp_header(source_port, dst_port, seq, ack_seq, ack_flag, fin_flag, window_size, payload):
-    size_of_header = 5 # 5 fields  
-    syn = 0
-    rst = 0
-    psh = 0
-    urg = 0
-    urg_ptr = 0
- 
-    header_length = (size_of_header << 4) + 0
-    tcp_flags = fin_flag + (syn << 1) + (rst << 2) + (psh <<3) + (ack_flag << 4) + (urg << 5)
-    if fin_flag == 0:
-        data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr) + payload
+    header_length = (5 << 4)
+    tcp_flags = fin_flag + (ack_flag << 4) 
+    if payload != "":
+        data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, 0) + payload
     else: 
-        data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr)
+        data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, 0)
     checksum = get_checksum(data)
-    return pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)
+    return pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, 0)
 
 
 def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
     if log_filename == "stdout":
-            print "%s, %s, %s, %d, %d, %s, %d" % (datetime.now(), src_port, dest_port, seq, ack_seq , tcp_flags, ERTT)
+            print "%s, %s, %s, %d, %d, %s, %f" % (datetime.now(), src_port, dest_port, seq, ack_seq , tcp_flags, ERTT/1000000)
     else:    
         try:
             f = open(log_filename,'a')
-            f.write("%s, %s, %s, %d, %d, %s, %d\n" % (datetime.now(), src_port, dest_port, ack_seq, ack_seq , tcp_flags, ERTT)) 
+            f.write("%s, %s, %s, %d, %d, %s, %f\n" % (datetime.now(), src_port, dest_port, ack_seq, ack_seq , tcp_flags, ERTT/1000000)) 
             f.close()
         except:
             print "file %s not found" % log_filename 
@@ -81,6 +76,37 @@ def checksum_verify(header):
     else:
         return -1    
 
+def update_ERTT(diff_usec):
+    '''
+    Ref: http://www.rfc-base.org/txt/rfc-6298.txt
+    When the first RTT measurement R is made, the host MUST set
+
+            SRTT <- R
+            RTTVAR <- R/2
+    '''
+    global ERTT
+    global devRTT
+    if ERTT == 0 : # first RTT
+        ERTT = diff_usec
+        devRTT = diff_usec/2
+    else:
+        a = 0.125
+        ERTT = (1 - a) * ERTT + a * diff_usec
+
+def update_devRTT(diff_usec):
+    global devRTT
+    b = 0.25
+    devRTT = (1-b) * devRTT + b * abs(diff_usec-ERTT)
+
+def update_timeout(diff_usec):
+    global ERTT
+    global devRTT
+    global timeout
+    update_ERTT(diff_usec)
+    update_devRTT(diff_usec)
+    timeout = (ERTT + 4 * devRTT) / 1000000 # seconds
+    #print "timeout = %f" % timeout
+
 def handle_ack(header, log_filename):
     # FIXME: add checksum
     if checksum_verify(header) != 0:
@@ -91,7 +117,16 @@ def handle_ack(header, log_filename):
     (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , header)  
     write_log(log_filename, source_port, dst_port, seq, ack_seq, tcp_flags)      
     if ack_seq not in acked_packets:
-        acked_packets[ack_seq] = datetime.now()
+        now = datetime.now()
+        acked_packets[ack_seq] = now
+        if ack_seq == fin_packet_seq:
+            sent_seq = ack_seq - last_packet_size
+        else:
+            sent_seq = ack_seq - MSS
+        diff = now - sent_packets[sent_seq]
+        diff_usec = diff.days * 24 * 60*60 *1000000 + diff.seconds*1000000 + diff.microseconds
+        #print "RTT = %d usec" % diff_usec
+        update_timeout(diff_usec)
         current_sending -= 1
     else: # duplicate ack
         print "duplicate ack: %d\n" % ack_seq  
@@ -117,11 +152,13 @@ def timeout_checker(log_filename, sock, ack_port_num, remote_ip, remote_port, pa
     if check_seq not in acked_packets: # packet lost timeout  
         tcp_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 0, window_size, all_packets[packet_seq])
         sock.sendto(tcp_header + all_packets[packet_seq], (remote_ip, remote_port))
+        sent_packets[packet_seq] = datetime.now()
         checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size) # register a timeout checker
         print "timeout! check seq %d failed, resend seq: %d\n" % (check_seq, packet_seq)
         write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0)
 
 def checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size):
+    print "checker timeout = %f" % timeout
     t = threading.Timer(timeout, timeout_checker, [log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size])
     t.daemon = True
     t.start()
@@ -136,7 +173,10 @@ def main():
     remote_port = int(sys.argv[3])
     ack_port_num = int(sys.argv[4])
     log_filename = sys.argv[5]
-    window_size = sys.argv[6]
+    if len (sys.argv) < 7:
+        window_size = 1
+    else:
+        window_size = sys.argv[6]
     global final_seq
     global fin_packet_seq
     global fin_received

@@ -15,19 +15,12 @@ def build_file(filename):
 
 
 def make_tcp_header(source_port, dst_port, seq, ack_seq, ack_flag, fin_flag, window_size):
-    size_of_header = 5 # 5 fields  
-    syn = 0
-    rst = 0
-    psh = 0
-    urg = 0
-    urg_ptr = 0
- 
-    header_length = (size_of_header << 4) + 0
-    tcp_flags = fin_flag + (syn << 1) + (rst << 2) + (psh <<3) + (ack_flag << 4) + (urg << 5)
-    data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, urg_ptr)
+    header_length = (5 << 4)
+    tcp_flags = fin_flag + (ack_flag << 4)
+    data = pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, 0, 0)
     checksum = get_checksum(data)
-    print checksum
-    return pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)
+    #print checksum
+    return pack('!HHLLBBHHH' , source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, 0)
 
 def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
     if log_filename == "stdout":
