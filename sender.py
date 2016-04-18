@@ -84,7 +84,7 @@ def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
     else:    
         try:
             f = open(log_filename,'a')
-            f.write("%s, %s, %s, %d, %d, %s, %f\n" % (datetime.now(), src_port, dest_port, ack_seq, ack_seq , tcp_flags, ERTT/1000000)) 
+            f.write("%s, %s, %s, %d, %d, %s, %f\n" % (datetime.now(), src_port, dest_port, seq, ack_seq , tcp_flags, ERTT/1000000)) 
             f.close()
         except:
             print "file %s not found" % log_filename 
@@ -193,8 +193,8 @@ def print_statistic():
     print "Delivery completed successfully"
     print "Total bytes sent = %d" % sent_bytes
     print "Segments sent = %d" % sent_count
-    retrans_rate = float(retransmit_count) / float(sent_count)
-    print "Segments retransmitted = %.2f %%" % retrans_rate*100
+    retrans_rate = (float(retransmit_count) / float(sent_count))*100
+    print "Segments retransmitted = %.2f %%" % retrans_rate
 
 def check_IPv4(addr):
     try:

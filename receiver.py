@@ -28,7 +28,7 @@ def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
     else:    
         try:
             f = open(log_filename,'a')
-            f.write("%s, %s, %s, %d, %d, %s\n" % (datetime.now(), src_port, dest_port, ack_seq, ack_seq , tcp_flags)) 
+            f.write("%s, %s, %s, %d, %d, %s\n" % (datetime.now(), src_port, dest_port, seq, ack_seq , tcp_flags)) 
             f.close()
         except:
             print "file %s not found" % log_filename 
