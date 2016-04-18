@@ -10,7 +10,6 @@ buffer_size = 1024
 ERTT = 0 
 devRTT = 0
 timeout = 3 # initial 3 secs ref: http://www.rfc-base.org/txt/rfc-6298.txt
-last_packet_size = 0
 final_seq = -1
 fin_packet_seq = -1
 fin_received = 0
@@ -48,16 +47,14 @@ def increase_retransmit():
 def build_all_packets(file):
     f = open(file)
     seq = 0
-    global last_packet_size
     global fin_packet_seq
     while True:
         chunk = f.read(MSS)
         if chunk == "":
             break
         all_packets[seq] = chunk
-        last_packet_size = len(chunk)
-        seq += MSS
-    fin_packet_seq = seq - MSS + last_packet_size
+        seq += 1
+    fin_packet_seq = seq 
 
 def get_checksum(data):
     checksum = 0
@@ -140,10 +137,8 @@ def handle_ack(header, log_filename):
     if ack_seq not in acked_packets:
         now = datetime.now()
         acked_packets[ack_seq] = now
-        if ack_seq == fin_packet_seq:
-            sent_seq = ack_seq - last_packet_size
-        else:
-            sent_seq = ack_seq - MSS
+        sent_seq = ack_seq - 1
+
         diff = now - sent_packets[sent_seq]
         diff_usec = diff.days * 24 * 60*60 *1000000 + diff.seconds*1000000 + diff.microseconds
         #print "RTT = %d usec" % diff_usec
@@ -155,9 +150,7 @@ def handle_ack(header, log_filename):
     return ack_seq
 
 def timeout_checker(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size):
-    if packet_seq == final_seq:
-        check_seq = packet_seq + last_packet_size
-    elif packet_seq == fin_packet_seq : # check if fin received
+    if packet_seq == fin_packet_seq : # check if fin received
         if fin_received == 0:
             fin_header = make_tcp_header(ack_port_num, remote_port, packet_seq, 0, 0, 1, window_size, "")
             sock.sendto(fin_header, (remote_ip, remote_port))
@@ -168,7 +161,7 @@ def timeout_checker(log_filename, sock, ack_port_num, remote_ip, remote_port, pa
             write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 1)
             return
     else:
-        check_seq = packet_seq + MSS    
+        check_seq = packet_seq + 1    
 
     #print "timeout_checker check %d for seq %d " % (check_seq, packet_seq)
     

@@ -3,7 +3,7 @@ import socket
 from struct import unpack, pack
 from datetime import datetime
 
-buffer_size = 1024
+buffer_size = 4096
 transfer_finished = 0
 recv_packets = dict() # dictionary: key = seq, value = data_buffer
 
@@ -32,7 +32,7 @@ def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
             f.close()
         except:
             print "file %s not found" % log_filename 
-        
+
 def get_checksum(data):
     checksum = 0
     for i in range(0, len(data), 2):
@@ -109,22 +109,15 @@ def main():
         if checksum_verify(data) != 0:
             continue
 
-        if seq not in recv_packets: # FIXME: add checksum
+        if seq not in recv_packets: 
             recv_packets[seq] = data[20:]
-            ack_seq = seq + len(data[20:]) 
+            ack_seq = seq + 1
             tcp_header = make_tcp_header(listening_port, sender_port, 0, ack_seq, 1, 0, 1)
             ack_sock.sendto(tcp_header, sockaddr) # send ACK packet
             write_log(log_filename, listening_port, sender_port, 0, ack_seq, 1<<4)
-        else: # duplicate packets # FIXME: add checksum
+        else: # duplicate packets 
             pass
-'''
-        else:  # packet lost or corrupt 
-            ack_seq = next_expect_seq
-            tcp_header = make_tcp_header(listening_port, sender_port, 0, ack_seq, 1, 0, 99, 5)
-            ack_sock.sendto(tcp_header, (sender_IP, sender_port)) # send ACK packet
-            write_log(log_filename, listening_port, sender_port, 0, ack_seq, 1<<4)
-'''
-        
+
 
 if __name__ == '__main__': 
     try:
