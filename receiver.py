@@ -32,18 +32,14 @@ def write_log(log_filename, src_port, dest_port, seq, ack_seq, tcp_flags):
             f.close()
         except:
             print "file %s not found" % log_filename 
-
-
-def carry(a, b):
-    c = a + b
-    return (c & 0xffff) + (c >> 16)
- 
+        
 def get_checksum(data):
-    s = 0
+    checksum = 0
     for i in range(0, len(data), 2):
-        w = ord(data[i]) + (ord(data[i+1]) << 8)
-        s = carry(s, w)
-    return ~s & 0xffff
+        w =((ord(data[i])<<8) & 0xFF00)+ ord(data[i+1])
+        checksum += w
+        checksum = (checksum & 0xFFFF) + (checksum >> 16)
+    return ~checksum & 0xffff
 
 def handle_packet(header, payload, log_filename):
     (source_port, dst_port, seq, ack_seq, header_length, tcp_flags,  window_size, checksum, urg_ptr)= unpack('!HHLLBBHHH' , header)
@@ -97,7 +93,7 @@ def main():
     af, socktype, proto, cn, sockaddr = res[0]
     print sockaddr
 
-    sock = create_sock_on_addr(sockaddr[0]) 
+    sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
     sock.bind((host, listening_port))
     ack_sock = create_sock_on_addr(sockaddr[0])
 
@@ -134,5 +130,5 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print '\nserver receive ctrl+C\n'
+        print '\nreceive ctrl+C\n'
         #build_file("output.txt")

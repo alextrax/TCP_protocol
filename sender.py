@@ -59,18 +59,13 @@ def build_all_packets(file):
         seq += MSS
     fin_packet_seq = seq - MSS + last_packet_size
 
-
-def carry(a, b):
-    c = a + b
-    return (c & 0xffff) + (c >> 16)
- 
 def get_checksum(data):
-    s = 0
+    checksum = 0
     for i in range(0, len(data), 2):
-        w = ord(data[i]) + (ord(data[i+1]) << 8)
-        s = carry(s, w)
-    return ~s & 0xffff
- 
+        w =((ord(data[i])<<8) & 0xFF00)+ ord(data[i+1])
+        checksum += w
+        checksum = (checksum & 0xFFFF) + (checksum >> 16)
+    return ~checksum & 0xffff
 
 def make_tcp_header(source_port, dst_port, seq, ack_seq, ack_flag, fin_flag, window_size, payload):
     header_length = (5 << 4)
@@ -199,7 +194,7 @@ def print_statistic():
     print "Total bytes sent = %d" % sent_bytes
     print "Segments sent = %d" % sent_count
     retrans_rate = float(retransmit_count) / float(sent_count)
-    print "Segments retransmitted = %.2f %%" % retrans_rate
+    print "Segments retransmitted = %.2f %%" % retrans_rate*100
 
 def check_IPv4(addr):
     try:
@@ -245,9 +240,9 @@ def main():
     print sockaddr
 
     sock = create_sock_on_addr(sockaddr[0])
-    ack_sock = create_sock_on_addr(sockaddr[0]) 
+    ack_sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
     ack_sock.bind((host, ack_port_num))
-    build_all_packets("test.txt")
+    build_all_packets(filename)
 
 
     global current_sending
@@ -305,7 +300,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print len(all_packets)
         print len(acked_packets)
-        print '\nserver receive ctrl+C\n'
+        print '\nreceive ctrl+C\n'
 
 
 
