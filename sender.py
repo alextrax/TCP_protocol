@@ -165,7 +165,7 @@ def timeout_checker(log_filename, sock, ack_port_num, remote_ip, remote_port, pa
             increase_retransmit()
             checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, packet_seq, window_size) # register a timeout checker
             print "fin packet delever failed\n" 
-            write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 0)
+            write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 1)
             return
     else:
         check_seq = packet_seq + MSS    
@@ -270,11 +270,12 @@ def main():
             if current == ack_sock: # receive ACK packet
                 data = current.recv(buffer_size) 
                 handle_ack(data[:20], log_filename)
-                if len(acked_packets) == len(all_packets):
+                if len(acked_packets) == len(all_packets): # send fin packet
                     fin_packet_seq = sorted(acked_packets)[-1]
                     fin_header = make_tcp_header(ack_port_num, remote_port, fin_packet_seq, 0, 0, 1, int(window_size), "")
                     sock.sendto(fin_header, sockaddr)   
                     increase_sent_byte(len(fin_header))
+                    write_log(log_filename, ack_port_num, remote_port, packet_seq, 0, 1)
                     checker_register(log_filename, sock, ack_port_num, remote_ip, remote_port, fin_packet_seq, int(window_size)) # register a timeout checker          
                     current.recv(buffer_size)
                     fin_received = 1
