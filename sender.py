@@ -92,6 +92,7 @@ def checksum_verify(header):
     if checksum == get_checksum(data): # valid packet
         return 0
     else:
+        print "%d != %d" % (checksum, get_checksum(data))
         return -1    
 
 def update_ERTT(diff_usec):
@@ -126,7 +127,6 @@ def update_timeout(diff_usec):
     #print "timeout = %f" % timeout
 
 def handle_ack(header, log_filename):
-    # FIXME: add checksum
     if checksum_verify(header) != 0:
         print "packet corruption"
         return
@@ -228,7 +228,11 @@ def main():
 
     print "<filename>%s <remote_IP>%s <remote_port>%d <ack_port_num>%d <log_filename>%s <window_size>%s " % (filename, remote_ip, remote_port, ack_port_num, log_filename, window_size)
 
-    res = socket.getaddrinfo(remote_ip, remote_port, socket.AF_UNSPEC, socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)
+    try:
+        res = socket.getaddrinfo(remote_ip, remote_port, socket.AF_UNSPEC, socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)
+    except:
+        print "invalid IP"
+        sys.exit(0)
     af, socktype, proto, cn, sockaddr = res[0]
     print sockaddr
 
@@ -262,7 +266,7 @@ def main():
         for current in inputready:
             if current == ack_sock: # receive ACK packet
                 data = current.recv(buffer_size) 
-                handle_ack(data[:20], log_filename)
+                handle_ack(data, log_filename)
                 if len(acked_packets) == len(all_packets): # send fin packet
                     fin_packet_seq = sorted(acked_packets)[-1]
                     fin_header = make_tcp_header(ack_port_num, remote_port, fin_packet_seq, 0, 0, 1, int(window_size), "")

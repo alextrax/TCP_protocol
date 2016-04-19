@@ -89,7 +89,12 @@ def main():
     log_filename = sys.argv[5]
 
     print "<filename>%s <listening_port>%d <sender_IP>%s <sender_port>%d <log_filename>%s " % (filename, listening_port, sender_IP, sender_port, log_filename)
-    res = socket.getaddrinfo(sender_IP, sender_port, socket.AF_UNSPEC, socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)
+    try:
+        res = socket.getaddrinfo(sender_IP, sender_port, socket.AF_UNSPEC, socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)
+    except:
+        print "invalid IP"
+        sys.exit(0)
+
     af, socktype, proto, cn, sockaddr = res[0]
     print sockaddr
 
